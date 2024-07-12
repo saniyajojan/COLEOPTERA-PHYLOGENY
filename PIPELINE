@@ -1,0 +1,197 @@
+PIPELINE USING ANTHRIBIDAE AS EXAMPLE:
+
+dos2unix cocc.txt # Convert txt file to correct format
+
+ls -d /mbl/share/workspaces/groups/voglerlab/MMGdatabase/gbmaster_2024-04-20/* | grep -Ff /mbl/share/workspaces/groups/voglerlab/sanij/fam6/anth/ant.txt | xargs cat > /mbl/share/workspaces/groups/voglerlab/sanij/fam6/anth/ant.gb # create gb.file
+
+#PREPARE THE PACKAGES
+chmod u+x extract_genes.py
+chmod u+x translate.py
+chmod u+x backtranslate.py
+chmod u+x findframe.py
+chmod u+x  catfasta2phyml.pl
+chmod u+x partitioner.py
+chmod u+x phylabel.R
+chmod u+x taxonomicindices.R
+
+#STEP 1
+mkdir 1_nt_raw
+./extract_genes.py -g cler.gb -o 1_nt_raw/ -k --genetypes CDS
+
+#STEP 2
+mkdir 2_aa_raw
+
+for file in 1_nt_raw/*
+do
+   ./translate.py 5 < $file > 2_aa_raw/${file#*/}
+done
+
+#STEP 3
+mkdir 3_aa_aln
+nano parallel_mafft.sh
+########################################
+#!/bin/bash
+
+# Directory paths
+RAW_DIR="2_aa_raw"
+ALN_DIR="3_aa_aln"
+
+# Create alignment directory if it doesn't exist
+mkdir -p ${ALN_DIR}
+
+# Function to run MAFFT on a single file
+run_mafft() {
+    local file=$1
+    local output_file="${ALN_DIR}/$(basename ${file})"
+    
+    # Run MAFFT with original settings
+    mafft --globalpair --maxiterate 1000 --anysymbol --thread 10 ${file} > ${output_file}
+    
+    echo "Processed ${file}"
+}
+
+export -f run_mafft
+export RAW_DIR
+export ALN_DIR
+
+# Run MAFFT in parallel on all files in the input directory
+parallel run_mafft ::: ${RAW_DIR}/*
+
+echo "All alignments completed successfully."
+###########################################################
+chmod +x parallel_mafft.sh
+./parallel_mafft.sh
+
+#STEP 4
+mkdir 4_nt_aln
+
+for file in 3_aa_aln/*
+do
+   ./backtranslate.py -i $file 1_nt_raw/${file#*/} 5 > 4_nt_aln/${file#*/}
+done
+
+#STEP 5
+mkdir 1r_nt_raw/
+./extract_genes.py -g cocc.gb -o 1r_nt_raw/ -k --genetypes rRNA tRNA
+
+
+#STEP 6
+mkdir 4r_nt_aln/
+for file in 1r_nt_raw/*
+do
+   mafft --globalpair --maxiterate 1000 --thread 10 $file > 4r_nt_aln/${file#*/}
+done
+
+#STEP 7
+
+# Nucleotide supermatrix
+./catfasta2phyml.pl -c -fasta 4_nt_aln/* > 5_nt_supermatrix.fasta 2> 5_nt_partitions.txt
+
+# Amino acid supermatrix
+
+./catfasta2phyml.pl -c -fasta 3_aa_aln/* > 5_aa_supermatrix.fasta 2> 5_aa_partitions.txt
+
+# Check for no errors
+cat *partitions.txt
+
+# Generate maximal partition tables for NT data
+# NB if you get an error about an unrecognised argument, redownload partitioner.py
+
+# Partition by genes
+./partitioner.py -a DNA < 5_nt_partitions.txt > 5_nt_gene_partitions.txt
+# Partition by genes and all three codon positions
+./partitioner.py -a DNA -c < 5_nt_partitions.txt > 5_nt_gene+codon123_partitions.txt
+# Partition by genes and first two codon positions
+./partitioner.py -a DNA -c -u 1 2 < 5_nt_partitions.txt > 5_nt_gene+codon12_partitions.txt
+
+# Generate maximal partition tables for AA data
+./partitioner.py -a MTART < 5_aa_partitions.txt > 5_aa_gene_partitions.txt 
+
+# STEP 8 
+nano fasta_ra.py
+#################################################################################
+import re
+
+def nexus_to_raxml(nexus_file, output_file, data_type='DNA'):
+    with open(nexus_file, 'r') as infile, open(output_file, 'w') as outfile:
+        inside_sets = False
+        
+        for line in infile:
+            if line.strip().lower() == 'begin sets;':
+                inside_sets = True
+            elif line.strip().lower() == 'end;':
+                inside_sets = False
+            elif inside_sets:
+                # Extract charset information
+                match = re.match(r'\s*charset\s+(\S+)\s*=\s*(\S+);', line, re.IGNORECASE)
+                if match:
+                    partition_name = match.group(1)
+                    partition_range = match.group(2)
+                    # Write in RAxML format with appropriate data type
+                    outfile.write(f'{data_type}, {partition_name} = {partition_range}\n')
+
+# List of input Nexus files and corresponding output RAxML files with data types
+files_to_convert = [
+    ('5_nt_gene_partitions.txt', '5_nt_gene_partitions_raxml.txt', 'DNA'),
+    ('5_nt_gene+codon12_partitions.txt', '5_nt_gene+codon12_partitions_raxml.txt', 'DNA'),
+    ('5_nt_gene+codon123_partitions.txt', '5_nt_gene+codon123_partitions_raxml.txt', 'DNA'),
+    ('5_aa_gene_partitions.txt', '5_aa_gene_partitions_raxml.txt', 'JTT')
+]
+
+# Convert each file
+for nexus_file, output_file, data_type in files_to_convert:
+    nexus_to_raxml(nexus_file, output_file, data_type)
+    print(f"Converted {nexus_file} to {output_file}")
+
+#############################################################################################################
+python fasta_ra.py
+
+# STEP 9 AMINO ACID TREE
+raxmlHPC -s 5_aa_supermatrix.fasta -n gene_aa_partitions_tree -m PROTGAMMAAUTO -p 12345 -q 5_aa_gene_partitions_raxml.txt
+
+# STEP 10 PARTITION 123 TREE
+raxmlHPC -s 5_nt_supermatrix.fasta -n gene_codon123_partitions_tree -m GTRGAMMAI -p 12345 -q 5_nt_gene+codon123_partitions_raxml.txt
+
+STEP 11 PARTITION12 TREE 
+create a genepositions.txt with gene positions in the format 1-652...
+nano genepositions.txt
+1-684
+685-852
+853-2439
+2440-3141
+3142-3930
+3931-5085
+5086-6045
+6046-7116
+7117-7479
+7480-8856
+8857-9156
+9157-10911
+10912-11451
+
+nano process_ranges.sh
+#############################################################################################
+#!/bin/bash
+
+while IFS=- read -r start end; do
+    for ((i = start; i <= end; i++)); do
+        n=$((i - start + 1))
+        if ((n % 3 == 0)); then
+            echo "$i"
+        fi
+    done
+done < genepositions.txt > excludefile.txt
+##############################################################################################
+chmod +x process_ranges.sh
+
+./process_ranges.sh
+
+sed 's/.*/&-&/' excludefile.txt > exclusion.txt
+
+raxmlHPC -f a -T 4 -m GTRCAT -n new_matrix -s 5_nt_supermatrix.fasta -p 54321 -q 5_nt_gene+codon123_partitions_raxml.txt -E exclusion.txt -N 10 -x 12345
+
+#FILTERSUMPERMATRIX
+
+python filter_supermatrix.py 
+
+raxmlHPC -s 5_nt_supermatrix_filtered.fasta -n gene_codon12_partitions_tree -m GTRGAMMAI -p 12345 -q 5_nt_gene+codon123_partitions_raxml.txt.exclusion.txt
