@@ -1,6 +1,6 @@
 PIPELINE USING ANTHRIBIDAE AS EXAMPLE:
 
-dos2unix cocc.txt # Convert txt file to correct format
+dos2unix ant.txt # Convert txt file to correct format
 
 ls -d /mbl/share/workspaces/groups/voglerlab/MMGdatabase/gbmaster_2024-04-20/* | grep -Ff /mbl/share/workspaces/groups/voglerlab/sanij/fam6/anth/ant.txt | xargs cat > /mbl/share/workspaces/groups/voglerlab/sanij/fam6/anth/ant.gb # create gb.file
 
@@ -16,7 +16,7 @@ chmod u+x taxonomicindices.R
 
 #STEP 1
 mkdir 1_nt_raw
-./extract_genes.py -g cler.gb -o 1_nt_raw/ -k --genetypes CDS
+./extract_genes.py -g ant.gb -o 1_nt_raw/ -k --genetypes CDS
 
 #STEP 2
 mkdir 2_aa_raw
@@ -72,7 +72,7 @@ done
 
 #STEP 5
 mkdir 1r_nt_raw/
-./extract_genes.py -g cocc.gb -o 1r_nt_raw/ -k --genetypes rRNA tRNA
+./extract_genes.py -g ant.gb -o 1r_nt_raw/ -k --genetypes rRNA tRNA
 
 
 #STEP 6
