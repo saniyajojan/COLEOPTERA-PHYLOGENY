@@ -195,3 +195,140 @@ raxmlHPC -f a -T 4 -m GTRCAT -n new_matrix -s 5_nt_supermatrix.fasta -p 54321 -q
 python filter_supermatrix.py 
 
 raxmlHPC -s 5_nt_supermatrix_filtered.fasta -n gene_codon12_partitions_tree -m GTRGAMMAI -p 12345 -q 5_nt_gene+codon123_partitions_raxml.txt.exclusion.txt
+
+
+# BARCODES ####################################################################################################################################################################
+#############################################################################################################################################################################
+#############################################################################################################################################################################
+#############################################################################################################################################################################
+
+mkdir 81_fant_raw
+
+mv COX1.fasta 81_fant_raw/COX1.fasta
+
+mv 81_fant_raw 81_adnt_raw
+
+mkdir 82_adaa_raw
+
+for file in 81_adnt_raw/*
+do
+   ./findframe.py -t 5 -u -r /home/sanij/mbl_sanij/fam6/phal/barcode/3_aa_aln/${file#*/} -s < $file | ./translate.py 5 > 82_adaa_raw/${file#*/}
+done
+
+
+mkdir 83_adaa_aln
+
+for file in 3_aa_aln/*
+do
+   name=${file#*/}
+   if [ -f "82_adaa_raw/$name" ]
+   then
+      mafft --addfragments 82_adaa_raw/$name --6merpair --anysymbol --thread 10 $file > 83_adaa_aln/$name
+   else
+      cp $file 83_adaa_aln/$name
+   fi
+done
+
+
+mkdir 81_alladnt_raw
+
+for file in 1_nt_raw/*
+do
+   cat $file 81_adnt_raw/${file#*/} > 81_alladnt_raw/${file#*/} 2> /dev/null
+done
+
+
+mkdir 84_adnt_aln
+
+for file in 83_adaa_aln/*
+do
+   ./backtranslate.py -s -i $file 81_alladnt_raw/${file#*/} 5 > 84_adnt_aln/${file#*/}
+done
+
+
+for file in 83_adaa_aln/*
+do
+   sed -i -E "s/;frame=[0-9]*(;$)?//" $file
+done
+
+
+grep -oP "(?<=^>).*$" 81_adnt_raw/COX1.fasta | sort | uniq > preserved.txt
+
+mkdir 9_adnt_aln_reduced
+
+./reducealign.py -a 84_adnt_aln/* -p preserved.txt -r -o 9_adnt_aln_reduced/reduced_alignments.fasta
+
+
+SUPERMATRIX
+
+./catfasta2phyml.pl -c -fasta COX1.fasta > 10_adnt_supermatrix.fasta 2> 10_adnt_partitions.txt
+
+
+nano clean_taxon_names.py
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+import re
+
+def clean_taxon_name(name):
+    # Define illegal characters and their replacements
+    replacements = {
+        ' ': '_',
+        ':': '_',
+        ',': '_',
+        ')': '_',
+        '(': '_',
+        ';': '_',
+        ']': '_',
+        '[': '_',
+        "'": '_'
+    }
+    # Create a regex pattern for illegal characters
+    pattern = re.compile(r"[ \t\r:,)(;\]\[']")
+    # Replace illegal characters using the replacements dictionary
+    for char, replacement in replacements.items():
+        name = name.replace(char, replacement)
+    return name
+
+# Input and output file paths
+input_file = '10_adnt_supermatrix.fasta'
+output_file = '10_adnt_supermatrix_clean.fasta'
+
+with open(input_file, 'r') as infile, open(output_file, 'w') as outfile:
+    for line in infile:
+        if line.startswith('>'):
+            # Clean the taxon name
+            taxon_name = line[1:].strip()
+            clean_name = clean_taxon_name(taxon_name)
+            outfile.write(f'>{clean_name}\n')
+        else:
+            outfile.write(line)
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+nano convert_ry.py
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+def convert_to_ry(input_fasta, output_fasta):
+    with open(input_fasta, "r") as input_handle, open(output_fasta, "w") as output_handle:
+        for record in SeqIO.parse(input_handle, "fasta"):
+            ry_seq = ""
+            for nucleotide in record.seq:
+                if nucleotide in "AG":
+                    ry_seq += "R"
+                elif nucleotide in "CT":
+                    ry_seq += "Y"
+                else:
+                    ry_seq += nucleotide  # Keep gaps or other characters unchanged
+            record.seq = Seq(ry_seq)  # Convert to Seq object
+            SeqIO.write(record, output_handle, "fasta")
+
+# Convert nucleotide alignment to RY alignment
+input_fasta = "10_adnt_supermatrix_clean.fasta"
+output_fasta = "10_adnt_supermatrix_ry.fasta"
+convert_to_ry(input_fasta, output_fasta)
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+TREE
+raxmlHPC -s 10_adnt_supermatrix_ry.fasta -n output -m GTRGAMMA -g backbone.nwk -T 4 -p 12345
