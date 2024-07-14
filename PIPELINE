@@ -212,7 +212,7 @@ mkdir 82_adaa_raw
 
 for file in 81_adnt_raw/*
 do
-   ./findframe.py -t 5 -u -r /home/sanij/mbl_sanij/fam6/phal/barcode/3_aa_aln/${file#*/} -s < $file | ./translate.py 5 > 82_adaa_raw/${file#*/}
+   ./findframe.py -t 5 -u -r /home/sanij/mbl_sanij/fam6/cler/barcode/3_aa_aln/${file#*/} -s < $file | ./translate.py 5 > 82_adaa_raw/${file#*/}
 done
 
 
@@ -256,7 +256,7 @@ grep -oP "(?<=^>).*$" 81_adnt_raw/COX1.fasta | sort | uniq > preserved.txt
 
 mkdir 9_adnt_aln_reduced
 
-./reducealign.py -a 84_adnt_aln/* -p preserved.txt -r -o 9_adnt_aln_reduced/reduced_alignments.fasta
+./reducealign.py -a 84_adnt_aln/* -p preserved.txt -r -o 9_adnt_aln_reduced/COX1.fasta
 
 
 SUPERMATRIX
