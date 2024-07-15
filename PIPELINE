@@ -351,7 +351,7 @@ import csv
 from Bio import SeqIO
 
 # Path to your GenBank file
-genbank_file = 'ant.gb'
+genbank_file = 'phal.gb'
 # Path to the output CSV file
 output_csv = 'sampling_dates.csv'
 
@@ -439,5 +439,7 @@ print("Dates updated. The new file 'updated_sampling_dates.csv' has been created
 TREETIME:
 treetime --tree RAxML_bestTree.output --dates updated_sampling_dates.csv --aln 10_adnt_supermatrix_clean.fasta --outdir dated_tree_output --clock-filter 2 --coalescent opt --gtr JC69
 
+
+treetime --tree RAxML_bestTree.output --dates updated_sampling_dates.csv --aln 10_adnt_supermatrix_clean.fasta --outdir dated_tree_output --clock-filter 2 --coalescent opt --gtr JC69 --stochastic-resolve
 
 
