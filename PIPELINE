@@ -149,6 +149,9 @@ python fasta_ra.py
 # STEP 9 AMINO ACID TREE
 raxmlHPC -s 5_aa_supermatrix.fasta -n gene_aa_partitions_tree -m PROTGAMMAAUTO -p 12345 -q 5_aa_gene_partitions_raxml.txt
 
+# STEP 9.2 REROOTING
+raxmlHPC -f I -m PROTGAMMAAUTO -t RAxML_bestTree.gene_aa_partitions_tree -o BIOD01226,BIOD04618,BIOD01611,BIOD00137,BIOD07230 -n rooted_tree
+
 # STEP 10 PARTITION 123 TREE
 raxmlHPC -s 5_nt_supermatrix.fasta -n gene_codon123_partitions_tree -m GTRGAMMAI -p 12345 -q 5_nt_gene+codon123_partitions_raxml.txt
 
