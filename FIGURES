@@ -1,0 +1,424 @@
+HEATMAPS #####################################################
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+# Assuming counts_list is already created
+save(counts_list, file = "counts_list.Rdata")
+
+
+load("HARPALINAE_BAYAREALIKE+J_M3_time-stratified_v1.Rdata")
+load("RES_clado_events_tables.Rdata")
+load("RES_ana_events_tables.Rdata")
+
+# Assume counts_list is saved in a file
+load("counts_list.Rdata")
+
+areas <- c("Oriental (A)", "Afrotropical (B)", "Palearctic (C)", "Nearctic (D)", "Neotropical (E)", "Australasian (F)")
+area_codes <- c("A", "B", "C", "D", "E", "F")
+
+all_dispersals_means <- counts_list$all_dispersals_counts_fromto_means
+all_dispersals_sds <- counts_list$all_dispersals_counts_fromto_sds
+
+range_expansions_means <- counts_list$d_counts_fromto_means
+range_expansions_sds <- counts_list$d_counts_fromto_sds
+
+founder_events_means <- counts_list$founder_counts_fromto_means
+founder_events_sds <- counts_list$founder_counts_fromto_sds
+
+#############################################################################
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+# Assuming counts_list is already created
+save(counts_list, file = "counts_list.Rdata")
+
+
+load("HARPALINAE_BAYAREALIKE+J_M3_time-stratified_v1.Rdata")
+load("RES_clado_events_tables.Rdata")
+load("RES_ana_events_tables.Rdata")
+
+# Assume counts_list is saved in a file
+load("counts_list.Rdata")
+
+areas <- c("Oriental (A)", "Afrotropical (B)", "Palearctic (C)", "Nearctic (D)", "Neotropical (E)", "Australasian (F)")
+area_codes <- c("A", "B", "C", "D", "E", "F")
+
+all_dispersals_means <- counts_list$all_dispersals_counts_fromto_means
+all_dispersals_sds <- counts_list$all_dispersals_counts_fromto_sds
+
+range_expansions_means <- counts_list$d_counts_fromto_means
+range_expansions_sds <- counts_list$d_counts_fromto_sds
+
+founder_events_means <- counts_list$founder_counts_fromto_means
+founder_events_sds <- counts_list$founder_counts_fromto_sds
+
+#################
+
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(dplyr)
+
+# Map area codes to zoogeographic realms
+area_labels <- c("Oriental", "Afrotropical", "Palearctic", "Nearctic", "Neotropical", "Australasian")
+area_codes <- c("A", "B", "C", "D", "E", "F")
+names(area_labels) <- area_codes
+
+# Prepare heatmap data
+prepare_heatmap_data <- function(means, sds, area_codes, area_labels) {
+  means_df <- as.data.frame(means)
+  colnames(means_df) <- area_labels
+  rownames(means_df) <- area_labels
+  
+  sds_df <- as.data.frame(sds)
+  colnames(sds_df) <- area_labels
+  rownames(sds_df) <- area_labels
+  
+  means_df$Source <- rownames(means_df)
+  sds_df$Source <- rownames(sds_df)
+  
+  means_melt <- melt(means_df, id.vars = "Source", variable.name = "Sink", value.name = "Count")
+  sds_melt <- melt(sds_df, id.vars = "Source", variable.name = "Sink", value.name = "SD")
+  
+  df <- merge(means_melt, sds_melt, by = c("Source", "Sink"))
+  
+  row_totals <- rowSums(means_df[ , -ncol(means_df)])
+  col_totals <- colSums(means_df[ , -ncol(means_df)])
+  
+  df$Source_Total <- row_totals[df$Source]
+  df$Sink_Total <- col_totals[df$Sink]
+  
+  df$Source_Percentage <- (df$Count / df$Source_Total) * 100
+  df$Sink_Percentage <- (df$Count / df$Sink_Total) * 100
+  
+  df$Source <- factor(df$Source, levels = area_labels)
+  df$Sink <- factor(df$Sink, levels = area_labels)
+  
+  return(df)
+}
+
+# Add margins for the heatmap data
+add_margins <- function(df, means_df, area_labels) {
+  row_sums <- rowSums(means_df)
+  col_sums <- colSums(means_df)
+  
+  row_margins <- data.frame(
+    Source = area_labels,
+    Sink = rep("Total", length(area_labels)),
+    Count = row_sums,
+    SD = rep(NA, length(area_labels)),
+    Source_Total = row_sums,
+    Sink_Total = rep(sum(row_sums), length(area_labels)),
+    Source_Percentage = (row_sums / sum(row_sums)) * 100,
+    Sink_Percentage = rep(NA, length(area_labels))
+  )
+  
+  col_margins <- data.frame(
+    Source = rep("Total", length(area_labels)),
+    Sink = area_labels,
+    Count = col_sums,
+    SD = rep(NA, length(area_labels)),
+    Source_Total = rep(sum(col_sums), length(area_labels)),
+    Sink_Total = col_sums,
+    Source_Percentage = rep(NA, length(area_labels)),
+    Sink_Percentage = (col_sums / sum(col_sums)) * 100
+  )
+  
+  grand_total <- data.frame(
+    Source = "Total",
+    Sink = "Total",
+    Count = sum(row_sums),
+    SD = NA,
+    Source_Total = sum(row_sums),
+    Sink_Total = sum(col_sums),
+    Source_Percentage = NA,
+    Sink_Percentage = NA
+  )
+  
+  df_with_margins <- rbind(df, row_margins, col_margins, grand_total)
+  
+  return(df_with_margins)
+}
+
+# Plot heatmap with custom totals
+plot_heatmap_with_custom_totals <- function(data, title, total_events) {
+  data <- data %>%
+    mutate(Label = ifelse(Source == Sink, "-", sprintf("%.1f (%.1f%%)\n[%.1f]", Count, (Count / total_events) * 100, SD))) %>%
+    mutate(Label = ifelse(Source == "Total" & Sink == "Total", sprintf("%.1f (100%%)", total_events), Label)) %>%
+    mutate(Label = ifelse(Source == "Total" & Sink != "Total", sprintf("%.1f (%.1f%%)", Count, (Count / total_events) * 100), Label)) %>%
+    mutate(Label = ifelse(Sink == "Total" & Source != "Total", sprintf("%.1f (%.1f%%)", Count, (Count / total_events) * 100), Label)) %>%
+    mutate(Label = ifelse(Source != "Total" & Sink != "Total" & Source != Sink, sprintf("%.1f (%.1f%%)\n[%.1f]", Count, (Count / total_events) * 100, SD), Label))
+  
+  ggplot(data, aes(x = Sink, y = Source)) +
+    geom_tile(aes(fill = ifelse(Sink == "Total" | Source == "Total", NA, Count)), color = "white") +
+    scale_fill_gradient(low = "white", high = "red", na.value = "lightgrey") +
+    geom_text(aes(label = Label), size = 3, fontface = "bold") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, fill = "Event Count")
+}
+
+# Apply the function to your data
+all_dispersals_df <- prepare_heatmap_data(all_dispersals_means, all_dispersals_sds, area_codes, area_labels)
+range_expansions_df <- prepare_heatmap_data(range_expansions_means, range_expansions_sds, area_codes, area_labels)
+founder_events_df <- prepare_heatmap_data(founder_events_means, founder_events_sds, area_codes, area_labels)
+
+all_dispersals_with_margins <- add_margins(all_dispersals_df, all_dispersals_means, area_labels)
+range_expansions_with_margins <- add_margins(range_expansions_df, range_expansions_means, area_labels)
+founder_events_with_margins <- add_margins(founder_events_df, founder_events_means, area_labels)
+
+# Calculate total events for each type
+total_events_all <- sum(all_dispersals_with_margins$Count[all_dispersals_with_margins$Source != "Total" & all_dispersals_with_margins$Sink != "Total"])
+total_events_range_expansions <- sum(range_expansions_with_margins$Count[range_expansions_with_margins$Source != "Total" & range_expansions_with_margins$Sink != "Total"])
+total_events_founder_events <- sum(founder_events_with_margins$Count[founder_events_with_margins$Source != "Total" & founder_events_with_margins$Sink != "Total"])
+
+# Plot Heatmaps
+heatmap_all <- plot_heatmap_with_custom_totals(all_dispersals_with_margins, "(a). Summary of dispersal events counts, (their percentages) and [standard deviations]", total_events_all)
+heatmap_range_expansions <- plot_heatmap_with_custom_totals(range_expansions_with_margins, "(b). Range expansion event counts (their percentages) and [standard deviations]", total_events_range_expansions)
+heatmap_founder_events <- plot_heatmap_with_custom_totals(founder_events_with_margins, "(c). Founder event counts (their percentages) and [standard deviations]", total_events_founder_events)
+
+# Save to PNG
+png("heatmaps_with_custom_totalsFF.png", height = 1800, width = 1800, res = 150)
+grid.arrange(heatmap_all, heatmap_range_expansions, heatmap_founder_events, ncol = 1)
+dev.off()
+
+GG TREES #############################################
+load("RES_clado_events_tables.Rdata")
+load("RES_ana_events_tables.Rdata")
+clado_events_tables = RES_clado_events_tables
+ana_events_tables = RES_ana_events_tables
+
+# Load necessary libraries
+library(ggtree)
+library(treeio)
+library(dplyr)
+
+# Assuming 'results_object' and 'tr' are already loaded in your environment
+# Load your tree object 'tr' and node states data frame 'node_states_df'
+
+# Define state labels and colors
+state_labels <- c("_", "A", "B", "C", "D", "E", "F", "AB", "AC", "AD", "AE", "AF", 
+                  "BC", "BD", "BE", "BF", "CD", "CE", "CF", "DE", "DF", "EF", 
+                  "ABC", "ABD", "ABE", "ABF", "ACD", "ACE", "ACF", "ADE", 
+                  "ADF", "AEF", "BCD", "BCE", "BCF", "BDE", "BDF", "BEF", 
+                  "CDE", "CDF", "CEF", "DEF", "ABCD", "ABCE", "ABCF", "ABDE", 
+                  "ABDF", "ABEF", "ACDE", "ACDF", "ACEF", "ADEF", "BCDE", 
+                  "BCDF", "BCEF", "BDEF", "CDEF", "ABCDE", "ABCDF", "ABCEF", 
+                  "ABDEF", "ACDEF", "BCDEF", "ABCDEF")
+
+state_colors <- c("snow", "red", "blue", "green", "orange", "purple", "brown", "pink", 
+                  "cyan", "magenta", "yellow", "darkgreen", "darkblue", "darkred", 
+                  "lightgreen", "lightblue", "salmon", "lightyellow", "black", 
+                  "gray", "darkorange", "violet", "turquoise", "lightpink", "beige", 
+                  "lavender", "khaki", "coral", "limegreen", "navy", "darkolivegreen", 
+                  "maroon", "aquamarine", "orchid", "sienna", "gold", "plum", 
+                  "darkslateblue", "tan", "darkcyan", "peru", "rosybrown", "seagreen", 
+                  "slateblue", "springgreen", "thistle", "tomato", "wheat", "steelblue", 
+                  "skyblue", "saddlebrown", "royalblue", "powderblue", "palegreen", 
+                  "palevioletred", "papayawhip", "peachpuff", "deepskyblue", "plum", 
+                  "sandybrown", "seashell", "yellowgreen", "lightcoral", "mediumpurple")
+
+names(state_colors) <- state_labels
+
+# Re-extract node states from the results object
+node_states <- as.data.frame(results_object$ML_marginal_prob_each_state_at_branch_top_AT_node)
+node_states_df <- cbind(node = rownames(node_states), node_states)
+
+# Ensure node column is character type
+node_states_df$node <- as.character(node_states_df$node)
+
+# Convert node column to integer type
+node_states_df$node <- as.integer(node_states_df$node)
+
+# Fix or remove rows with NA node values
+node_states_df <- node_states_df[!is.na(node_states_df$node), ]
+
+# Map states to the appropriate state label
+node_states_df$state <- apply(node_states_df[, -1], 1, function(x) state_labels[which.max(x)])
+
+# Ensure 'state' is a factor with levels matching 'state_labels'
+node_states_df$state <- factor(node_states_df$state, levels = state_labels)
+
+# Plot the tree with the colored branches
+p <- ggtree(tr, layout = "circular") %<+% node_states_df + 
+  geom_tree(aes(color = state)) +
+  scale_color_manual(values = state_colors, name = "State") +
+  theme(legend.position = "right")
+
+# Function to extract in-situ speciation events
+extract_insitu_speciation_events <- function(clado_events_tables) {
+  speciation_events <- list()
+  
+  for (i in 1:length(clado_events_tables)) {
+    clado_table <- clado_events_tables[[i]]
+    sympatry_events <- clado_table %>%
+      filter(grepl("sympatry", clado_event_type, ignore.case = TRUE))
+    speciation_events[[i]] <- sympatry_events
+  }
+  
+  speciation_events_df <- do.call(rbind, speciation_events)
+  return(speciation_events_df)
+}
+
+# Extract the in-situ speciation events
+insitu_speciation_events <- extract_insitu_speciation_events(clado_events_tables)
+
+# Extract node positions from the ggtree object
+node_positions <- as_tibble(p$data) %>%
+  filter(!isTip) %>%
+  select(node, x, y)
+
+# Ensure that the state column in insitu_speciation_events matches the state_labels
+insitu_speciation_events$state <- factor(insitu_speciation_events$sampled_states_AT_nodes, levels = seq_along(state_labels), labels = state_labels)
+
+# Merge node states with node positions
+node_states_positions <- insitu_speciation_events %>%
+  select(node, state) %>%
+  left_join(node_positions, by = "node")
+
+# Add node states as colored circles
+p <- p + geom_point(data = node_states_positions, aes(x = x, y = y, fill = state), shape = 21, size = 2) +
+  scale_fill_manual(values = state_colors, name = "State") +
+  theme(legend.position = "right")
+
+# Add time scale (adjust to desired points)
+time_points <- c(50, 100, 150)
+for (tp in time_points) {
+  p <- p + annotate("text", x = tp, y = 0, label = tp, angle = 90, hjust = 1, vjust = -0.5)
+}
+
+# Save the plot
+ggsave("tree_with_insitu_speciation_events_and_time_scale.png", plot = p, width = 10, height = 10)
+
+#################################################################################
+
+# Ensure you have all required libraries installed
+library(dplyr)
+
+# Assuming you have already extracted the in-situ speciation events into 'insitu_speciation_events'
+# Ensure 'insitu_speciation_events' contains the 'state' column corresponding to regions A, B, C, D, E, F
+
+# Filter the events to only include the regions A, B, C, D, E, F
+relevant_regions <- c("A", "B", "C", "D", "E", "F")
+filtered_events <- insitu_speciation_events %>%
+  filter(state %in% relevant_regions)
+
+# Calculate the mean number of in-situ speciation events for each region
+mean_speciation_per_region <- filtered_events %>%
+  group_by(state) %>%
+  summarise(mean_speciation = n() / length(clado_events_tables))
+
+# Print the result
+print(mean_speciation_per_region)
+
+
+
+
+
+
+
+
+
+# Ensure you have all required libraries installed
+library(dplyr)
+
+# Assuming you have already extracted the in-situ speciation events into 'insitu_speciation_events'
+# Ensure 'insitu_speciation_events' contains the 'state' column corresponding to regions A, B, C, D, E, F
+
+# Filter the events to only include the regions A, B, C, D, E, F
+relevant_regions <- c("A", "B", "C", "D", "E", "F")
+filtered_events <- insitu_speciation_events %>%
+  filter(state %in% relevant_regions)
+
+# Calculate the mean number of in-situ speciation events for each region
+mean_speciation_per_region <- filtered_events %>%
+  group_by(state) %>%
+  summarise(mean_speciation = n() / length(clado_events_tables))
+
+# Calculate the total number of in-situ speciation events
+total_speciation_events <- sum(mean_speciation_per_region$mean_speciation)
+
+# Calculate the percentage of in-situ speciation events for each region
+mean_speciation_per_region <- mean_speciation_per_region %>%
+  mutate(percentage = (mean_speciation / total_speciation_events) * 100)
+
+# Print the result
+print(mean_speciation_per_region)
+
+
+##########################
+
+# Load necessary libraries
+library(ape)
+library(dplyr)
+library(phytools)
+
+# Read the phylogenetic tree
+tr <- read.tree("corrected_HARP_tree.newick")
+
+# Check the structure of the tipranges object
+str(tipranges)
+
+# Inspect the tipranges@df object
+tipranges_df <- tipranges@df
+
+# Check the first few rows of tipranges_df to understand its structure
+head(tipranges_df)
+
+# Assuming the tip ranges are stored as binary presence/absence in the dataframe
+# Convert the binary presence/absence to region labels (A, B, C, D, E, F)
+tip_labels <- colnames(tipranges_df)
+tip_states <- apply(tipranges_df, 1, function(row) {
+  regions <- tip_labels[which(row == 1)]
+  if (length(regions) == 0) return("_")
+  return(paste(regions, collapse = ""))
+})
+
+# Create a data frame with tip labels and their corresponding states
+tip_states_df <- data.frame(tip = tr$tip.label, state = tip_states)
+
+# Filter the tip states to only include the regions A, B, C, D, E, F
+relevant_regions <- c("A", "B", "C", "D", "E", "F")
+filtered_tip_states <- tip_states_df %>%
+  filter(state %in% relevant_regions)
+
+# Count the number of taxa per region
+taxa_per_region <- filtered_tip_states %>%
+  group_by(state) %>%
+  summarise(num_taxa = n())
+
+# Print the result
+print(taxa_per_region)
+
+# Step 2: Calculate the mean number of in-situ speciation events for each region
+# Assuming you have already extracted the in-situ speciation events into 'insitu_speciation_events'
+# Ensure 'insitu_speciation_events' contains the 'state' column corresponding to regions A, B, C, D, E, F
+
+# Filter the events to only include the regions A, B, C, D, E, F
+filtered_events <- insitu_speciation_events %>%
+  filter(state %in% relevant_regions)
+
+# Calculate the mean number of in-situ speciation events for each region
+mean_speciation_per_region <- filtered_events %>%
+  group_by(state) %>%
+  summarise(mean_speciation = n() / length(clado_events_tables))
+
+# Print the result
+print(mean_speciation_per_region)
+
+# Step 3: Calculate the number of speciation events per taxa for each region
+# Merge the taxa per region data with the mean speciation per region data
+speciation_per_taxa <- merge(mean_speciation_per_region, taxa_per_region, by = "state")
+
+# Calculate the number of speciation events per taxa for each region
+speciation_per_taxa <- speciation_per_taxa %>%
+  mutate(speciation_per_taxa = mean_speciation / num_taxa)
+
+# Print the result
+print(speciation_per_taxa)
+
+# Save the result as a CSV file
+write.csv(speciation_per_taxa, file = "speciation_per_taxa.csv", row.names = FALSE)
+###########################################################################################################
+
+unique(insitu_speciation_events$clado_event_txt)
