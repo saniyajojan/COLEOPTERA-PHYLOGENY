@@ -1,0 +1,167 @@
+setwd("C:/Users/saniy/OneDrive/diss_biogeo/A_COUNT")
+# Load necessary libraries
+library(tidyr)
+library(dplyr)
+library(lme4)
+library(multcomp)
+
+# Function to load data and extract totals
+load_and_extract_totals <- function(file_path) {
+  load(file_path)
+  
+  within_speciation_totals <- as.numeric(counts_list$sympatry_totals_list)
+  vicariance_totals <- as.numeric(counts_list$vicariance_totals_list)
+  dispersal_totals <- as.numeric(counts_list$all_dispersals_totals_list)
+  
+  data.frame(
+    Family = gsub("counts_list.Rdata", "", basename(file_path)),
+    Map = 1:length(within_speciation_totals),
+    Within_Speciation = within_speciation_totals,
+    Vicariance = vicariance_totals,
+    Dispersal = dispersal_totals
+  )
+}
+
+# List of file paths
+file_paths <- c("PHALcounts_list.Rdata", "ANTHcounts_list.Rdata", 
+                "CLERcounts_list.Rdata", "MORDcounts_list.Rdata", 
+                "HARPcounts_list.Rdata")
+
+# Load and combine data from all families
+totals_all_families <- do.call(rbind, lapply(file_paths, load_and_extract_totals))
+
+# Reshape the data for linear modeling
+totals_long_all <- totals_all_families %>%
+  pivot_longer(cols = c(Within_Speciation, Vicariance, Dispersal), 
+               names_to = "Event_Type", 
+               values_to = "Total")
+
+# Fit the linear mixed-effects model
+model <- lmer(Total ~ Event_Type + (1 | Family), data = totals_long_all)
+
+# View the summary of the model
+summary(model)
+
+# Conduct post-hoc tests
+posthoc <- glht(model, linfct = mcp(Event_Type = "Tukey"))
+
+# Summary of the post-hoc test
+summary(posthoc)
+
+
+
+# Set up the plotting area to display 2x2 plots
+par(mfrow = c(2, 2))
+
+# Generate the diagnostic plots
+plot(model)
+
+# Reset plotting area to default (single plot)
+par(mfrow = c(1, 1))
+
+
+qqnorm(resid(model))
+qqline(resid(model), col = "red")
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(ggplot2)
+# Create the boxplot
+boxplot <- ggplot(totals_long_all, aes(x = Event_Type, y = Total, fill = Event_Type)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Event Types", x = "Event Type", y = "Total Count") +
+  theme_minimal()
+
+# Save the boxplot as a PNG file
+ggsave("boxplot_event_types.png", plot = boxplot, width = 8, height = 6, dpi = 300)
+
+
+
+# Create the interaction plot
+interaction_plot <- ggplot(totals_long_all, aes(x = Event_Type, y = Total, group = Family, color = Family)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Interaction Plot: Event Types across Families", x = "Event Type", y = "Total Count") +
+  theme_minimal()
+
+# Save the interaction plot as a PNG file
+ggsave("interaction_plot_event_types.png", plot = interaction_plot, width = 8, height = 6, dpi = 300)
+
+
+
+
+########################################################################################################################
+
+library(ggplot2)
+
+# Ensure the 'Total' column is log-transformed (this should already be done in your previous steps)
+# totals_long_all$Total <- log1p(totals_long_all$Total)  # Uncomment if the transformation wasn't done previously
+
+# Create the boxplot for log-transformed data
+boxplot <- ggplot(totals_long_all, aes(x = Event_Type, y = Total, fill = Event_Type)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Event Types (Log-Transformed)", 
+       x = "Event Type", 
+       y = "Log-Transformed Total Count") +
+  theme_minimal()
+
+# Save the boxplot as a PNG file
+ggsave("boxplot_event_types_log_transformed.png", plot = boxplot, width = 8, height = 6, dpi = 300)
+
+# Create the interaction plot for log-transformed data
+interaction_plot <- ggplot(totals_long_all, aes(x = Event_Type, y = Total, group = Family, color = Family)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Interaction Plot: Event Types across Families (Log-Transformed)", 
+       x = "Event Type", 
+       y = "Log-Transformed Total Count") +
+  theme_minimal()
+
+# Save the interaction plot as a PNG file
+ggsave("interaction_plot_event_types_log_transformed.png", plot = interaction_plot, width = 8, height = 6, dpi = 300)
+
+
+
+
+
+
+
+# Load the necessary library for combining plots
+library(patchwork)
+
+# Ensure the 'Total' column is log-transformed (if needed)
+# totals_long_all$Total <- log1p(totals_long_all$Total)  # Uncomment if the transformation wasn't done previously
+
+# Create the boxplot for log-transformed data
+boxplot <- ggplot(totals_long_all, aes(x = Event_Type, y = Total, fill = Event_Type)) +
+  geom_boxplot() +
+  labs(title = "A: Distribution of Event Types (Log-Transformed)", 
+       x = "Event Type", 
+       y = "Log-Transformed Total Count") +
+  theme_minimal()
+
+# Create the interaction plot for log-transformed data
+interaction_plot <- ggplot(totals_long_all, aes(x = Event_Type, y = Total, group = Family, color = Family)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "B: Interaction Plot: Event Types across Families (Log-Transformed)", 
+       x = "Event Type", 
+       y = "Log-Transformed Total Count") +
+  theme_minimal()
+
+# Combine the plots into a single panel side by side
+combined_plot <- boxplot + interaction_plot + plot_layout(ncol = 2)
+
+# Save the combined plot as a PNG file
+ggsave("combined_plot_side_by_side.png", plot = combined_plot, width = 16, height = 6, dpi = 300)
+
